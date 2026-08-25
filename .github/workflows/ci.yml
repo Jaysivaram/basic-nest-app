@@ -47,8 +47,8 @@ jobs:
       - name: Check container logs
         run: docker logs nestapp-ci
 
-      - name: Wait for Application
-        run: sleep 60
+      - name: Inspect container
+        run: docker inspect nestapp-ci
 
       - name: Test application
         run: curl --fail http://localhost:3000
