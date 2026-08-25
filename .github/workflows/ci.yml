@@ -48,7 +48,7 @@ jobs:
         run: docker logs nestapp-ci
 
       - name: Wait for Application
-        run: sleep 10
+        run: sleep 60
 
       - name: Test application
         run: curl --fail http://localhost:3000
