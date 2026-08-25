@@ -34,3 +34,6 @@ jobs:
 
       - name: Check Docker Version
         run: docker --version
+      
+      - name: Build docker image
+        run: docker build -t nestapp-ci:latest .
