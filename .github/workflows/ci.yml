@@ -37,3 +37,12 @@ jobs:
       
       - name: Build docker image
         run: docker build -t nestapp-ci:latest .
+
+      - name: Run Docker Container
+        run: docker run -d --name nestapp-ci -p 3000:3000 nestapp-ci:latest
+
+      - name: Wait for Application
+        run: sleep
+
+      - name: Test application
+        run: curl --fail http://localhost:3000/health
