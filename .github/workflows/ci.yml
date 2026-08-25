@@ -42,7 +42,7 @@ jobs:
         run: docker run -d --name nestapp-ci -p 3000:3000 nestapp-ci:latest
 
       - name: Wait for Application
-        run: sleep
+        run: sleep 10
 
       - name: Test application
         run: curl --fail http://localhost:3000/health
