@@ -1,6 +1,6 @@
 name: CI
 
-on: 
+on:
   push:
     branches:
       - main
@@ -8,7 +8,6 @@ on:
   pull_request:
     branches:
       - main
-
 
 jobs:
   build:
@@ -18,37 +17,51 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node .jobs
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm ci
 
       - name: Run Tests
         run: npm test
-      
+
       - name: Build Application
         run: npm run build
 
       - name: Check Docker Version
         run: docker --version
-      
-      - name: Build docker image
+
+      - name: Build Docker Image
         run: docker build -t nestapp-ci:latest .
 
       - name: Run Docker Container
-        run: docker run -d --name nestapp-ci -p 3000:3000 nestapp-ci:latest
+        run: |
+          docker run -d \
+            --name nestapp-ci \
+            -p 3000:3000 \
+            nestapp-ci:latest
 
-      - name: Check container
+      - name: Check Container Status
         run: docker ps -a
 
-      - name: Check container logs
+      - name: Check Container Logs
         run: docker logs nestapp-ci
 
-      - name: Inspect container
+      - name: Check Application Inside Container
+        run: |
+          docker exec nestapp-ci \
+            sh -c "wget -qO- http://127.0.0.1:3000 || true"
+
+      - name: Inspect Container
         run: docker inspect nestapp-ci
 
-      - name: Test application
+      - name: Wait for Application
+        run: |
+          echo "Waiting for application..."
+          sleep 10
+
+      - name: Test Application
         run: curl --fail http://localhost:3000
