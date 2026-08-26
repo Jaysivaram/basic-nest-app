@@ -13,56 +13,201 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # CI environment variables
+    # These are available to docker compose
+    env:
+      APP_PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      DB_NAME: nestpp
+
     steps:
+
+      # ----------------------------------------
+      # Checkout Code
+      # ----------------------------------------
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # ----------------------------------------
+      # Setup Node.js
+      # ----------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
+      # ----------------------------------------
+      # Install Dependencies
+      # ----------------------------------------
       - name: Install Dependencies
         run: npm ci
 
+      # ----------------------------------------
+      # Run Unit Tests
+      # ----------------------------------------
       - name: Run Tests
         run: npm test
 
+      # ----------------------------------------
+      # Build NestJS Application
+      # ----------------------------------------
       - name: Build Application
         run: npm run build
 
+      # ----------------------------------------
+      # Check Docker
+      # ----------------------------------------
       - name: Check Docker Version
         run: docker --version
 
-      - name: Build Docker Image
-        run: docker build -t nestapp-ci:latest .
+      - name: Check Docker Compose Version
+        run: docker compose version
 
-      - name: Run Docker Container
+      # ----------------------------------------
+      # Verify CI Environment
+      # ----------------------------------------
+      - name: Verify Environment
         run: |
-          docker run -d \
-            --name nestapp-ci \
-            -e PORT=3000 \
-            -p 3000:3000 \
-            nestapp-ci:latest
+          echo "APP_PORT=${APP_PORT}"
+          echo "DB_HOST=${DB_HOST}"
+          echo "DB_PORT=${DB_PORT}"
+          echo "DB_USER=${DB_USER}"
+          echo "DB_NAME=${DB_NAME}"
+          echo "DB_PASSWORD is configured: ${DB_PASSWORD:+yes}"
 
+      # ----------------------------------------
+      # Build Docker Images
+      # ----------------------------------------
+      - name: Build Docker Images
+        run: docker compose build
+
+      # ----------------------------------------
+      # Start MySQL + NestJS
+      # ----------------------------------------
+      - name: Start Docker Compose
+        run: docker compose up -d
+
+      # ----------------------------------------
+      # Check Container Status
+      # ----------------------------------------
       - name: Check Container Status
-        run: docker ps -a
+        run: docker compose ps
 
-      - name: Check Container Logs
-        run: docker logs nestapp-ci
-
-      - name: Check Application Inside Container
+      # ----------------------------------------
+      # Wait for MySQL
+      # ----------------------------------------
+      - name: Wait for MySQL
         run: |
-          docker exec nestapp-ci \
-            sh -c "wget -qO- http://127.0.0.1:3000 || true"
+          echo "Waiting for MySQL..."
 
-      - name: Inspect Container
-        run: docker inspect nestapp-ci
+          for i in {1..30}; do
 
+            if docker compose exec -T mysql \
+              mysqladmin ping \
+              -h localhost \
+              -uroot \
+              -p"${DB_PASSWORD}" \
+              --silent; then
+
+              echo "MySQL is ready!"
+              exit 0
+            fi
+
+            echo "MySQL is not ready yet..."
+            sleep 2
+          done
+
+          echo "MySQL failed to become ready."
+
+          docker compose ps
+          docker compose logs mysql
+
+          exit 1
+
+      # ----------------------------------------
+      # Show MySQL Logs
+      # ----------------------------------------
+      - name: MySQL Logs
+        if: always()
+        run: docker compose logs mysql
+
+      # ----------------------------------------
+      # Show Application Logs
+      # ----------------------------------------
+      - name: Application Logs
+        if: always()
+        run: docker compose logs app
+
+      # ----------------------------------------
+      # Wait for NestJS Application
+      # ----------------------------------------
       - name: Wait for Application
         run: |
-          echo "Waiting for application..."
-          sleep 10
+          echo "Waiting for NestJS application..."
 
+          for i in {1..30}; do
+
+            if curl \
+              --silent \
+              --fail \
+              http://localhost:${APP_PORT}; then
+
+              echo ""
+              echo "NestJS application is ready!"
+              exit 0
+            fi
+
+            echo "Application is not ready yet..."
+            sleep 2
+          done
+
+          echo "Application failed to start."
+
+          docker compose ps
+          docker compose logs app
+
+          exit 1
+
+      # ----------------------------------------
+      # Test Application
+      # ----------------------------------------
       - name: Test Application
-        run: curl --fail http://localhost:3000
+        run: |
+          curl \
+            --fail \
+            --show-error \
+            --verbose \
+            http://localhost:${APP_PORT}
+
+      # ----------------------------------------
+      # Check Application Inside Container
+      # ----------------------------------------
+      - name: Check Application Inside Container
+        run: |
+          docker compose exec -T app \
+            wget -qO- http://127.0.0.1:3000
+
+      # ----------------------------------------
+      # Final Container Status
+      # ----------------------------------------
+      - name: Final Container Status
+        if: always()
+        run: docker compose ps -a
+
+      # ----------------------------------------
+      # Final Logs
+      # ----------------------------------------
+      - name: Final Logs
+        if: always()
+        run: docker compose logs
+
+      # ----------------------------------------
+      # Shutdown Docker Compose
+      # ----------------------------------------
+      - name: Shutdown Docker Compose
+        if: always()
+        run: docker compose down -v
